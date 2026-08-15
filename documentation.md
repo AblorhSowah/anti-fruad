@@ -1,4 +1,3 @@
-# Shadow-TX Hunter — System Documentation
 ## AML Intelligence Platform | Final Year Project
 
 ---
