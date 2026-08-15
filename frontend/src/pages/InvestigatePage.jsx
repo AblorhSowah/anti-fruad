@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CytoscapeComponent from 'react-cytoscapejs'
-import { getNetwork } from '../api'
+import { getNetwork, getTransactions, friendlyError } from '../api'
+
+const TX_PAGE_SIZE = 50
+const TX_THRESHOLD = 0.7
 
 function AlertGlobe({ fromCountry, toCountry, fromLat, fromLon, toLat, toLon }) {
   const canvasRef = useRef(null)
@@ -58,9 +61,9 @@ function AlertGlobe({ fromCountry, toCountry, fromLat, fromLon, toLat, toLon }) 
       const dp=toXYZ(dotMid.lat,dotMid.lon-rot*180/Math.PI)
       if(dp.visible){ctx.beginPath();ctx.arc(dp.x,dp.y,4,0,Math.PI*2);ctx.fillStyle='#ff2d5a';ctx.globalAlpha=0.95;ctx.fill();ctx.globalAlpha=1;for(let t=1;t<=6;t++){const tp=(dotProgress-t*0.025+1)%1;const tm=slerp(fromLat,fromLon,toLat,toLon,tp);const trail=toXYZ(tm.lat,tm.lon-rot*180/Math.PI);if(!trail.visible)continue;ctx.beginPath();ctx.arc(trail.x,trail.y,2,0,Math.PI*2);ctx.fillStyle='#ff2d5a';ctx.globalAlpha=0.12*(7-t);ctx.fill();ctx.globalAlpha=1}}
       const fp=toXYZ(fromLat,fromLon)
-      if(fp.visible){const pulse=0.5+0.4*Math.sin(Date.now()*0.003);ctx.beginPath();ctx.arc(fp.x,fp.y,8+5*pulse,0,Math.PI*2);ctx.strokeStyle='#5dcaa5';ctx.lineWidth=1;ctx.globalAlpha=0.3*pulse;ctx.stroke();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(fp.x,fp.y,7,0,Math.PI*2);ctx.fillStyle='#5dcaa5';ctx.fill();ctx.font="600 10px 'Share Tech Mono'";ctx.fillStyle='#5dcaa5';ctx.fillText(fromCountry,fp.x+10,fp.y-8)}
+      if(fp.visible){const pulse=0.5+0.4*Math.sin(Date.now()*0.003);ctx.beginPath();ctx.arc(fp.x,fp.y,8+5*pulse,0,Math.PI*2);ctx.strokeStyle='#5dcaa5';ctx.lineWidth=1;ctx.globalAlpha=0.3*pulse;ctx.stroke();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(fp.x,fp.y,7,0,Math.PI*2);ctx.fillStyle='#5dcaa5';ctx.fill();ctx.font="600 10px Roboto, sans-serif";ctx.fillStyle='#5dcaa5';ctx.fillText(fromCountry,fp.x+10,fp.y-8)}
       const tp2=toXYZ(toLat,toLon)
-      if(tp2.visible){const pulse=0.5+0.4*Math.sin(Date.now()*0.003+Math.PI);ctx.beginPath();ctx.arc(tp2.x,tp2.y,8+5*pulse,0,Math.PI*2);ctx.strokeStyle='#ff2d5a';ctx.lineWidth=1.5;ctx.globalAlpha=0.4*pulse;ctx.stroke();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(tp2.x,tp2.y,7,0,Math.PI*2);ctx.fillStyle='#ff2d5a';ctx.fill();ctx.font="600 10px 'Share Tech Mono'";ctx.fillStyle='#ff2d5a';ctx.fillText(toCountry,tp2.x+10,tp2.y-8)}
+      if(tp2.visible){const pulse=0.5+0.4*Math.sin(Date.now()*0.003+Math.PI);ctx.beginPath();ctx.arc(tp2.x,tp2.y,8+5*pulse,0,Math.PI*2);ctx.strokeStyle='#ff2d5a';ctx.lineWidth=1.5;ctx.globalAlpha=0.4*pulse;ctx.stroke();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(tp2.x,tp2.y,7,0,Math.PI*2);ctx.fillStyle='#ff2d5a';ctx.fill();ctx.font="600 10px Roboto, sans-serif";ctx.fillStyle='#ff2d5a';ctx.fillText(toCountry,tp2.x+10,tp2.y-8)}
       const rim=ctx.createRadialGradient(cx,cy,R-4,cx,cy,R+16);rim.addColorStop(0,'rgba(93,202,165,0.1)');rim.addColorStop(1,'rgba(93,202,165,0)')
       ctx.beginPath();ctx.arc(cx,cy,R+16,0,Math.PI*2);ctx.fillStyle=rim;ctx.fill()
       ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.strokeStyle='rgba(93,202,165,0.18)';ctx.lineWidth=1.5;ctx.stroke()
@@ -108,6 +111,13 @@ export default function InvestigatePage() {
   const [input, setInput] = useState(accountId || '')
   const [scanning, setScanning] = useState(false)
   const [stats, setStats] = useState({ nodes: 0, edges: 0, flagged: 0 })
+  const [networkError, setNetworkError] = useState('')
+  const [transactions, setTransactions] = useState([])
+  const [txTotal, setTxTotal] = useState(0)
+  const [txPage, setTxPage] = useState(0)
+  const [txLoading, setTxLoading] = useState(false)
+  const [txError, setTxError] = useState('')
+  const [txRefreshTick, setTxRefreshTick] = useState(0)
   const cyRef = useRef(null)
   const nodeTimersRef = useRef([])
 
@@ -118,8 +128,27 @@ export default function InvestigatePage() {
     }
   }, [accountId, datasetId])
 
+  useEffect(() => { setTxPage(0) }, [datasetId])
+
+  // Landing view: list every transaction in the dataset so the user can browse
+  // and jump into any account, instead of requiring them to already know an ID.
+  useEffect(() => {
+    if (mode !== 'idle' || !datasetId) return
+    let cancelled = false
+    setTxLoading(true); setTxError('')
+    getTransactions(datasetId, TX_THRESHOLD, TX_PAGE_SIZE, txPage * TX_PAGE_SIZE)
+      .then(res => {
+        if (cancelled) return
+        setTransactions(res.data.transactions)
+        setTxTotal(res.data.total)
+      })
+      .catch(e => { if (!cancelled) setTxError(friendlyError(e)) })
+      .finally(() => { if (!cancelled) setTxLoading(false) })
+    return () => { cancelled = true }
+  }, [mode, datasetId, txPage, txRefreshTick])
+
   const loadNetwork = async (id) => {
-    setScanning(true); setSelected(null)
+    setScanning(true); setSelected(null); setNetworkError('')
     try {
       const res = await getNetwork(id, datasetId)
       const nodes = res.data.nodes.map(n => ({
@@ -130,9 +159,15 @@ export default function InvestigatePage() {
         data: { id: `e${i}`, source: e.source, target: e.target, amount: e.amount, risk: e.risk_score || 0 },
         style: { opacity: 0 }
       }))
+      if (nodes.length === 0) {
+        setNetworkError(`No transactions found for account "${id}" in this dataset.`)
+      }
       setStats({ nodes: nodes.length, edges: edges.length, flagged: nodes.filter(n => n.data.risk > 0.7).length })
       setElements([...nodes, ...edges])
-    } catch(e) { console.error(e) }
+    } catch(e) {
+      setNetworkError(friendlyError(e))
+      setElements([])
+    }
     finally { setScanning(false) }
   }
 
@@ -142,12 +177,21 @@ export default function InvestigatePage() {
     loadNetwork(accountId || input)
   }
 
-  const trace = () => {
-    if (!input.trim()) return
+  const traceAccount = (id) => {
+    if (!id) return
     if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null }
+    setInput(id)
     setMode('graph'); setElements([])
-    setParams({ account_id: input.trim(), dataset_id: datasetId })
-    loadNetwork(input.trim())
+    setParams({ account_id: id, dataset_id: datasetId })
+    loadNetwork(id)
+  }
+
+  const trace = () => traceAccount(input.trim())
+
+  const backToOverview = () => {
+    if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null }
+    setMode('idle'); setElements([]); setSelected(null); setInput('')
+    setParams(datasetId ? { dataset_id: datasetId } : {})
   }
 
   // Ripple-in animation: nodes appear one by one from center outward
@@ -189,22 +233,28 @@ export default function InvestigatePage() {
     nodeTimersRef.current.push(et)
   }
 
+  // Cytoscape renders to canvas, so it can't read CSS custom properties (var(--...))
+  // directly — resolve the current theme once per render instead.
+  const isLightMode = typeof document !== 'undefined' && document.documentElement.classList.contains('light-mode')
+  const graphLabelColor = isLightMode ? '#45536b' : '#8b949e'
+  const graphSelectColor = isLightMode ? '#1a2847' : '#ffffff'
+
   const stylesheet = [
     { selector: 'node', style: {
       'background-color': (ele) => { const r=ele.data('risk'); return r>0.85?'#e63946':r>0.7?'#ffd60a':'#00ff9d' },
       'border-color': (ele) => { const r=ele.data('risk'); return r>0.85?'#e63946':r>0.7?'#ffd60a':'#1e2a38' },
       'border-width': (ele) => ele.data('risk')>0.7?3:1,
-      'width':24,'height':24,'label':'data(label)','color':'#8b949e',
-      'font-size':9,'font-family':'Share Tech Mono','text-valign':'bottom','text-margin-y':6
+      'width':24,'height':24,'label':'data(label)','color':graphLabelColor,
+      'font-size':9,'font-family':'Roboto, sans-serif','text-valign':'bottom','text-margin-y':6
     }},
-    { selector: 'node:selected', style: { 'border-color':'#fff','border-width':3,'width':32,'height':32 }},
+    { selector: 'node:selected', style: { 'border-color':graphSelectColor,'border-width':3,'width':32,'height':32 }},
     { selector: 'edge', style: {
       'width': (ele)=>Math.max(1,Math.min(4,(ele.data('amount')||0)/50000)),
       'line-color': (ele)=>ele.data('risk')>0.7?'#e63946':'#1e2a38',
       'target-arrow-color': (ele)=>ele.data('risk')>0.7?'#e63946':'#2a3a4a',
       'target-arrow-shape':'triangle','curve-style':'bezier','arrow-scale':0.7,'opacity':0.8
     }},
-    { selector: 'edge:selected', style: { 'line-color':'#fff','target-arrow-color':'#fff','width':3 }}
+    { selector: 'edge:selected', style: { 'line-color':graphSelectColor,'target-arrow-color':graphSelectColor,'width':3 }}
   ]
 
   return (
@@ -218,6 +268,11 @@ export default function InvestigatePage() {
           <button className="btn btn-green" style={{ width:'100%' }} onClick={trace}>
             {scanning ? 'SCANNING...' : 'TRACE NETWORK'}
           </button>
+          {mode !== 'idle' && (
+            <button className="btn" style={{ width:'100%', marginTop:8, fontSize:10 }} onClick={backToOverview}>
+              ⌂ ALL TRANSACTIONS
+            </button>
+          )}
         </div>
 
         {mode==='globe' && fromCountry && (
@@ -293,23 +348,94 @@ export default function InvestigatePage() {
       <div style={{ background:'var(--bg)', position:'relative', overflow:'hidden' }}>
         {scanning && (
           <div style={{ position:'absolute', inset:0, zIndex:10, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16, background:'rgba(8,10,15,0.85)' }}>
-            <div style={{ fontFamily:'var(--mono)', color:'var(--green)', fontSize:13, letterSpacing:3, animation:'pulse 1s infinite' }}>SCANNING NETWORK...</div>
-            <div style={{ fontFamily:'var(--mono)', color:'var(--text2)', fontSize:10 }}>Tracing transaction paths from {(accountId||input)?.slice(0,12)}</div>
+            <div style={{ fontFamily:'var(--mono)', color:'var(--green)', fontSize:13, letterSpacing:1.5, animation:'pulse 1s infinite' }}>SCANNING NETWORK...</div>
+            <div style={{ fontFamily:'var(--mono)', color:'var(--dark-chrome-text2)', fontSize:10 }}>Tracing transaction paths from {(accountId||input)?.slice(0,12)}</div>
           </div>
         )}
 
-        {!scanning && mode==='idle' && (
+        {!scanning && mode==='idle' && !datasetId && (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', flexDirection:'column', gap:20 }}>
             <IdleGlobe />
-            <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--text2)', letterSpacing:3 }}>ENTER AN ACCOUNT ID TO TRACE ITS NETWORK</div>
-            <div style={{ fontFamily:'var(--mono)', fontSize:9, color:'rgba(255,45,90,0.5)', letterSpacing:2 }}>● RED PATHS = FLAGGED TRANSACTIONS</div>
+            <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--text2)', letterSpacing:1.5 }}>ENTER AN ACCOUNT ID TO TRACE ITS NETWORK</div>
+            <div style={{ fontFamily:'var(--mono)', fontSize:9, color:'rgba(255,45,90,0.5)', letterSpacing:1 }}>SELECT A DATASET ON THE DATASETS PAGE FIRST</div>
+          </div>
+        )}
+
+        {!scanning && mode==='idle' && datasetId && (
+          <div style={{ height:'100%', overflow:'auto', padding:24, display:'flex', flexDirection:'column', gap:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <div className="tag" style={{ color:'var(--accent)' }}>◈ ALL TRANSACTIONS</div>
+              <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--text2)' }}>
+                {txTotal.toLocaleString()} total · flagged at ≥{(TX_THRESHOLD*100).toFixed(0)}% risk
+              </div>
+              {txLoading && <span style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--cyan)', animation:'pulse 1s infinite' }}>↻ loading…</span>}
+              <span style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--text2)', marginLeft:'auto' }}>click any account to investigate it</span>
+            </div>
+
+            {txError ? (
+              <div className="card" style={{ borderLeft:'3px solid var(--accent)', display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+                <span style={{ fontFamily:'var(--mono)', fontSize:11, color:'var(--accent)' }}>⚠ {txError}</span>
+                <button className="btn" style={{ fontSize:10, marginLeft:'auto' }} onClick={() => setTxRefreshTick(t => t + 1)}>RETRY</button>
+              </div>
+            ) : (
+              <div className="card" style={{ padding:0, overflow:'hidden' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 1fr 0.9fr 1.3fr 0.7fr 1fr', gap:8, padding:'10px 14px', borderBottom:'1px solid var(--border)' }}>
+                  {['SENDER','RECEIVER','AMOUNT','TYPE','ROUTE','RISK','STATUS'].map(h => (
+                    <div key={h} style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--text2)', letterSpacing:1 }}>{h}</div>
+                  ))}
+                </div>
+                {transactions.length === 0 && !txLoading ? (
+                  <div style={{ padding:24, textAlign:'center', fontFamily:'var(--mono)', fontSize:11, color:'var(--text2)' }}>No transactions in this dataset.</div>
+                ) : transactions.map((t, i) => (
+                  <div key={i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 1fr 0.9fr 1.3fr 0.7fr 1fr', gap:8, padding:'10px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', alignItems:'center' }}>
+                    <button onClick={() => traceAccount(t.sender)} title={`Investigate ${t.sender}`}
+                      style={{ background:'none', border:'none', padding:0, cursor:'pointer', textAlign:'left', fontFamily:'var(--mono)', fontSize:11, color:'var(--cyan)', textDecoration:'underline', textUnderlineOffset:2 }}>
+                      {t.sender?.slice(0, 14)}
+                    </button>
+                    <button onClick={() => traceAccount(t.receiver)} title={`Investigate ${t.receiver}`}
+                      style={{ background:'none', border:'none', padding:0, cursor:'pointer', textAlign:'left', fontFamily:'var(--mono)', fontSize:11, color:'var(--cyan)', textDecoration:'underline', textUnderlineOffset:2 }}>
+                      {t.receiver?.slice(0, 14)}
+                    </button>
+                    <div style={{ fontFamily:'var(--mono)', fontSize:11, color:'var(--yellow)' }}>{parseFloat(t.amount || 0).toLocaleString()}</div>
+                    <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--text2)' }}>{t.type || '-'}</div>
+                    <div style={{ fontFamily:'var(--mono)', fontSize:9 }}>
+                      <span style={{ color:'var(--green)' }}>{t.from_country || '?'}</span>
+                      <span style={{ color:'var(--text2)' }}> → </span>
+                      <span style={{ color:'var(--accent)' }}>{t.to_country || '?'}</span>
+                    </div>
+                    <div style={{ fontFamily:'var(--mono)', fontSize:11, color: t.flagged ? 'var(--accent)' : 'var(--text)' }}>
+                      {((t.risk_score || 0) * 100).toFixed(0)}%
+                    </div>
+                    <div>
+                      <span style={{
+                        fontFamily:'var(--mono)', fontSize:9, fontWeight:700, padding:'3px 8px', borderRadius:3, letterSpacing:0.5, whiteSpace:'nowrap',
+                        color: t.flagged ? 'var(--accent)' : 'var(--green)',
+                        background: t.flagged ? 'rgba(255,59,94,0.12)' : 'rgba(0,255,136,0.08)'
+                      }}>
+                        {t.flagged ? '⚠ FLAGGED' : '✓ CLEAN'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {txTotal > TX_PAGE_SIZE && (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:16 }}>
+                <button className="btn" style={{ fontSize:10 }} disabled={txPage === 0} onClick={() => setTxPage(p => Math.max(0, p - 1))}>← PREV</button>
+                <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--text2)' }}>
+                  {txPage * TX_PAGE_SIZE + 1}–{Math.min(txTotal, (txPage + 1) * TX_PAGE_SIZE)} of {txTotal.toLocaleString()}
+                </span>
+                <button className="btn" style={{ fontSize:10 }} disabled={(txPage + 1) * TX_PAGE_SIZE >= txTotal} onClick={() => setTxPage(p => p + 1)}>NEXT →</button>
+              </div>
+            )}
           </div>
         )}
 
         {!scanning && mode==='globe' && (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', flexDirection:'column', gap:20 }}>
             <AlertGlobe fromCountry={fromCountry} toCountry={toCountry} fromLat={fromLat} fromLon={fromLon} toLat={toLat} toLon={toLon} />
-            <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--accent)', letterSpacing:2, animation:'pulse 1s infinite' }}>
+            <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--accent)', letterSpacing:1, animation:'pulse 1s infinite' }}>
               ⚠ SUSPICIOUS TRANSFER DETECTED — CLICK FOLLOW THE MONEY TO INVESTIGATE
             </div>
           </div>
@@ -322,7 +448,19 @@ export default function InvestigatePage() {
             cy={handleCyReady} />
         )}
 
-        <div style={{ position:'absolute', bottom:16, right:16, fontFamily:'var(--mono)', fontSize:9, color:'var(--border)', letterSpacing:2 }}>
+        {!scanning && mode==='graph' && elements.length===0 && (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', flexDirection:'column', gap:16, padding:32, textAlign:'center' }}>
+            <div style={{ fontSize:32 }}>{networkError ? '⚠' : '🔍'}</div>
+            <div style={{ fontFamily:'var(--mono)', fontSize:12, color: networkError ? 'var(--accent)' : 'var(--text2)', letterSpacing:1, maxWidth:420, lineHeight:1.6 }}>
+              {networkError || 'No network data to show yet.'}
+            </div>
+            {networkError && (
+              <button className="btn btn-green" style={{ fontSize:11 }} onClick={() => loadNetwork(accountId || input)}>RETRY</button>
+            )}
+          </div>
+        )}
+
+        <div style={{ position:'absolute', bottom:16, right:16, fontFamily:'var(--mono)', fontSize:9, color:'var(--border)', letterSpacing:1 }}>
           SHADOW HUNTER — AML INTELLIGENCE SYSTEM
         </div>
       </div>

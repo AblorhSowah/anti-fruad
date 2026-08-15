@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { getStats, getAlerts, getTopSuspicious } from '../api'
+import { getStats, getAlerts, getTopSuspicious, friendlyError } from '../api'
 
 // Count-up hook
 function useCountUp(target, duration=1500, active=false) {
@@ -77,23 +77,32 @@ export default function DashboardPage() {
   const [threshold, setThreshold] = useState(0.7)
   const [loaded, setLoaded] = useState(false)
   const [barsReady, setBarsReady] = useState(false)
+  const [error, setError] = useState('')
+  const [fetchTick, setFetchTick] = useState(0) // bumped to retry after a failure
 
   useEffect(() => {
     if (!datasetId) return
+    let cancelled = false
     setLoaded(false)
     setBarsReady(false)
+    setError('')
     Promise.all([
       getStats(datasetId),
       getAlerts(datasetId, threshold),
       getTopSuspicious(datasetId, threshold)
     ]).then(([s, a, t]) => {
+      if (cancelled) return
       setStats(s.data)
       setAlerts(a.data)
       setTopAccounts(t.data)
       setLoaded(true)
       setTimeout(() => setBarsReady(true), 300)
+    }).catch((e) => {
+      if (cancelled) return
+      setError(friendlyError(e))
     })
-  }, [datasetId, threshold])
+    return () => { cancelled = true }
+  }, [datasetId, threshold, fetchTick])
 
   const handleAlertClick = (a) => {
     sessionStorage.setItem('dataset_id', datasetId)
@@ -110,6 +119,35 @@ export default function DashboardPage() {
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'calc(100vh - 56px)', flexDirection:'column', gap:16 }}>
       <div style={{ fontFamily:'var(--mono)', color:'var(--text2)' }}>No dataset selected.</div>
       <button className="btn" onClick={() => navigate('/app')}>GO TO DATASETS</button>
+    </div>
+  )
+
+  if (error) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'calc(100vh - 56px)', flexDirection:'column', gap:16, padding:32, textAlign:'center' }}>
+      <div style={{ fontSize:36 }}>⚠</div>
+      <div style={{ fontFamily:'var(--mono)', fontSize:13, color:'var(--accent)', fontWeight:700 }}>COULD NOT LOAD ANALYSIS</div>
+      <div style={{ fontFamily:'var(--sans)', color:'var(--text2)', maxWidth:480, fontSize:13, lineHeight:1.6 }}>{error}</div>
+      <div style={{ display:'flex', gap:10 }}>
+        <button className="btn btn-green" onClick={() => setFetchTick(t => t + 1)}>RETRY</button>
+        <button className="btn" onClick={() => navigate('/app')}>GO TO DATASETS</button>
+      </div>
+    </div>
+  )
+
+  // Only block the whole page on the very first fetch for this dataset. A threshold
+  // change also flips `loaded` false briefly while it refetches — that should update
+  // the table in place, not flash a full-page spinner over already-visible results.
+  if (!loaded && !stats) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'calc(100vh - 56px)', flexDirection:'column', gap:16 }}>
+      <div style={{
+        width:44, height:44, borderRadius:'50%',
+        border:'3px solid var(--border)', borderTopColor:'var(--green)',
+        animation:'spin 0.8s linear infinite'
+      }} />
+      <div style={{ fontFamily:'var(--mono)', fontSize:12, color:'var(--text2)', letterSpacing:1, animation:'pulse 1.2s infinite' }}>
+        ANALYZING DATASET {datasetId}…
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 
@@ -177,6 +215,7 @@ export default function DashboardPage() {
               onChange={e => setThreshold(parseFloat(e.target.value))}
               style={{ accentColor:'var(--accent)', width:100 }} />
             <span style={{ fontFamily:'var(--mono)', fontSize:10, color:'var(--accent)', minWidth:30 }}>{threshold.toFixed(2)}</span>
+            {!loaded && <span style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--cyan)', animation:'pulse 1s infinite' }}>↻ updating…</span>}
           </div>
         </div>
 

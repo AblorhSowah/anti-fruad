@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shadow-TX Hunter</title>
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@300;400&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<title>Anti Fraud</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--void:#05070a;--green:#5dcaa5;--red:#ff2d5a;--white:#f0f5fb;--slate:#8ba0b4}
@@ -18,16 +18,16 @@ canvas#bg{position:absolute;inset:0;width:100%;height:100%}
 
 #vignette{position:absolute;inset:0;background:radial-gradient(ellipse 70% 70% at 50% 50%,transparent 30%,rgba(2,3,5,0.7) 80%,rgba(1,2,4,0.95) 100%);pointer-events:none}
 #text-panel{position:absolute;left:6%;top:50%;transform:translateY(-50%);width:220px;z-index:10}
-.chapter-num{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.3em;color:var(--slate);text-transform:uppercase;margin-bottom:14px;opacity:0;transition:opacity 0.8s}
-.chapter-title{font-family:'EB Garamond',serif;font-size:28px;font-weight:300;color:var(--white);line-height:1.25;margin-bottom:12px;opacity:0;transition:opacity 0.8s}
-.chapter-body{font-family:'EB Garamond',serif;font-size:13px;font-weight:300;color:var(--slate);line-height:1.65;opacity:0;transition:opacity 0.8s}
+.chapter-num{font-family:'Roboto',sans-serif;font-size:10px;letter-spacing:0.12em;color:var(--slate);text-transform:uppercase;margin-bottom:14px;opacity:0;transition:opacity 0.8s}
+.chapter-title{font-family:'Roboto',sans-serif;font-size:28px;font-weight:400;color:var(--white);line-height:1.25;margin-bottom:12px;opacity:0;transition:opacity 0.8s}
+.chapter-body{font-family:'Roboto',sans-serif;font-size:13px;font-weight:300;color:var(--slate);line-height:1.65;opacity:0;transition:opacity 0.8s}
 
 /* Stats reveal panel */
 #stats-panel{position:absolute;right:6%;top:50%;transform:translateY(-50%);width:200px;z-index:10;opacity:0;transition:opacity 1s}
 #stats-panel.show{opacity:1}
-.stat-line{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--slate);margin-bottom:16px;overflow:hidden}
-.stat-label{letter-spacing:0.2em;font-size:9px;color:var(--slate);opacity:0.6;margin-bottom:4px}
-.stat-value{font-family:'EB Garamond',serif;font-size:32px;font-weight:300;color:var(--white);overflow:hidden;white-space:nowrap}
+.stat-line{font-family:'Roboto',sans-serif;font-size:11px;color:var(--slate);margin-bottom:16px;overflow:hidden}
+.stat-label{letter-spacing:0.1em;font-size:9px;color:var(--slate);opacity:0.6;margin-bottom:4px}
+.stat-value{font-family:'Roboto',sans-serif;font-size:32px;font-weight:500;color:var(--white);overflow:hidden;white-space:nowrap}
 .stat-value.red{color:var(--red)}
 .stat-value.green{color:var(--green)}
 
@@ -35,18 +35,18 @@ canvas#bg{position:absolute;inset:0;width:100%;height:100%}
 .tick{width:24px;height:2px;background:rgba(255,255,255,0.12);transition:background 0.4s}
 .tick.active{background:var(--red)}
 .tick.done{background:rgba(255,45,90,0.25)}
-#replay{position:absolute;top:28px;right:32px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:0.15em;color:var(--red);border:1px solid rgba(255,45,90,0.5);background:rgba(255,45,90,0.06);padding:8px 20px;border-radius:20px;cursor:pointer;z-index:10;transition:background 0.2s}
+#replay{position:absolute;top:28px;right:32px;font-family:'Roboto',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.08em;color:var(--red);border:1px solid rgba(255,45,90,0.5);background:rgba(255,45,90,0.06);padding:8px 20px;border-radius:20px;cursor:pointer;z-index:10;transition:background 0.2s}
 #replay:hover{background:rgba(255,45,90,0.14)}
 
 /* Skip button */
-#skip-btn{position:absolute;top:28px;left:32px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.2em;color:rgba(139,160,180,0.5);border:1px solid rgba(139,160,180,0.2);background:transparent;padding:8px 16px;border-radius:20px;cursor:pointer;z-index:10;transition:all 0.2s}
-#skip-btn:hover{color:var(--slate);border-color:rgba(139,160,180,0.5)}
+#skip-btn{position:absolute;top:28px;left:32px;font-family:'Roboto',sans-serif;font-weight:600;font-size:10px;letter-spacing:0.1em;color:var(--green);border:1px solid rgba(93,202,165,0.4);background:rgba(93,202,165,0.08);padding:8px 16px;border-radius:20px;cursor:pointer;z-index:10;transition:all 0.2s}
+#skip-btn:hover{background:rgba(93,202,165,0.16);border-color:var(--green)}
 
 /* Boot counter */
-#boot-counter{position:absolute;bottom:28px;right:32px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.2em;color:var(--slate);opacity:0.5;z-index:10}
+#boot-counter{position:absolute;bottom:28px;right:32px;font-family:'Roboto',sans-serif;font-size:10px;letter-spacing:0.1em;color:var(--slate);opacity:0.5;z-index:10}
 
 /* Enter button with pulse */
-#enter-btn{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:0.2em;color:var(--green);border:1px solid rgba(93,202,165,0.4);background:rgba(93,202,165,0.06);padding:10px 32px;border-radius:20px;cursor:pointer;z-index:10;opacity:0;transition:opacity 0.8s,background 0.2s;pointer-events:none;position:absolute}
+#enter-btn{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);font-family:'Roboto',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.1em;color:var(--green);border:1px solid rgba(93,202,165,0.4);background:rgba(93,202,165,0.06);padding:10px 32px;border-radius:20px;cursor:pointer;z-index:10;opacity:0;transition:opacity 0.8s,background 0.2s;pointer-events:none;position:absolute}
 #enter-btn.show{opacity:1;pointer-events:auto;animation:btnPulse 2s ease-in-out infinite}
 #enter-btn:hover{background:rgba(93,202,165,0.14)}
 @keyframes btnPulse{0%,100%{box-shadow:0 0 0 0 rgba(93,202,165,0.4)}50%{box-shadow:0 0 0 12px rgba(93,202,165,0)}}
@@ -98,7 +98,7 @@ canvas#bg{position:absolute;inset:0;width:100%;height:100%}
     <div class="tick" id="t4"></div><div class="tick" id="t5"></div>
   </div>
 
-  <button id="skip-btn" onclick="skipToEnd()">[ SKIP ]</button>
+  <button id="skip-btn" title="Skip to final screen" onclick="skipToEnd()">[ SKIP INTRO ]</button>
   <button id="replay">REPLAY</button>
   <div id="boot-counter">SYSTEM BOOT: 00:30</div>
   <button id="enter-btn" style="position:absolute;bottom:80px;left:50%;transform:translateX(-50%)" onclick="window.location.href='/app'">ENTER SYSTEM →</button>
@@ -392,15 +392,15 @@ function drawVerdict(alpha){
   if(alpha<=0) return;
   const vx=cx*1.15+Math.min(W,H)*0.2, vy=cy-30;
   ctx.globalAlpha=alpha;
-  ctx.font=`500 10px 'Share Tech Mono'`;
+  ctx.font=`600 10px 'Roboto', sans-serif`;
   ctx.fillStyle=RED;
   ctx.fillText('CLUSTER 47 · FLAGGED',vx,vy);
   ctx.beginPath(); ctx.moveTo(vx,vy+10); ctx.lineTo(vx+180,vy+10);
   ctx.strokeStyle=RED; ctx.lineWidth=0.8; ctx.stroke();
-  ctx.font=`300 52px 'EB Garamond'`;
+  ctx.font=`700 52px 'Roboto', sans-serif`;
   ctx.fillStyle=WHITE;
   ctx.fillText('0.94',vx,vy+68);
-  ctx.font=`400 10px 'Share Tech Mono'`;
+  ctx.font=`500 10px 'Roboto', sans-serif`;
   ctx.fillStyle=RED;
   ctx.fillText('RISK SCORE',vx,vy+88);
   ctx.globalAlpha=1;

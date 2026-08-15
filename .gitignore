@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.venv-1/
+venv/
+env/
+
+# Reference datasets (large, downloaded — not source code)
+# HI-Small_Trans.csv alone is 600MB+; keep the repo out of GitHub's file-size limits.
+backend/data/*.csv
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc logs
+*.log

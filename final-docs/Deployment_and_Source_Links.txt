@@ -1,0 +1,60 @@
+Student Name: Sowah Frank Ablorh
+Student ID: 22427676
+Project Title: Anti-Fraud System (AML Intelligence Platform, internal codename "Shadow-TX Hunter")
+Live Application: NOT YET DEPLOYED — see "Deployment Guide" below
+Admin URL: N/A — no separate admin interface exists in the current version
+Test Username: N/A — the system currently has no authentication layer (see Technical_Debt_Plan.md, item D-4)
+Test Password: N/A
+Admin Username: N/A
+Admin Password: N/A
+Source Code Repository: [FILL IN — e.g. https://github.com/<your-account>/anti-fruad]
+
+=====================================================================
+STATUS AS OF 2026-08-14
+=====================================================================
+
+This file is a template, not a finished submission record. As of this
+date the system runs locally only:
+
+  - Backend (FastAPI):      http://localhost:8000
+  - Neo4j graph database:   bolt://localhost:7687 (via `docker compose up -d`)
+  - Frontend (Vite/React):  http://localhost:5173
+
+Verified working locally in this session:
+  - GET /health returns {"status":"ok","neo4j":"connected"} with Neo4j up
+  - A real dataset was uploaded and scored through the running system
+    (dataset id "bccd5028", 1,304 transactions, 1,153 accounts)
+  - Dashboard- and Investigate-backing endpoints returned consistent,
+    correct data for that dataset
+
+Before this file can be completed truthfully, the project owner needs to:
+
+  1. Choose a hosting target for the frontend (e.g. Vercel, Netlify) and
+     the backend (e.g. Render, Fly.io, a small VM — needs to run Python +
+     PyTorch, so check the platform's build-time/size limits against
+     backend/requirements.txt).
+  2. Provision a cloud-reachable Neo4j instance (Neo4j AuraDB free tier is
+     the simplest option) instead of bolt://localhost:7687, and move the
+     connection URI + credentials out of source code and into environment
+     variables (Technical_Debt_Plan.md, item D-2) before publishing this
+     repository or its deployment anywhere.
+  3. Set the frontend's API base URL (currently hardcoded to
+     http://localhost:8000 in frontend/src/api.js) to the deployed
+     backend's public URL.
+  4. Restrict backend CORS (currently allow_origins=["*"]) to the
+     deployed frontend's actual origin (Technical_Debt_Plan.md, item D-3).
+  5. Decide whether to add a minimal auth layer before publishing a live
+     URL (Technical_Debt_Plan.md, item D-4) — the brief's Test/Admin
+     credential fields above assume some form of login exists; the
+     current prototype has none.
+  6. Re-run the geocoding startup step (or precompute the country/lat-lon
+     cache per Technical_Debt_Plan.md item D-5) so the deployed backend
+     doesn't take ~60-90 seconds to become healthy after every restart.
+  7. Fill in this file's header fields (name, student ID, live URL,
+     repository link, and any credentials actually created in step 5)
+     and re-verify every link/login works from a clean browser session
+     before submission, per the brief's final checklist.
+
+Do not submit this file with placeholder values still in place — the
+brief explicitly requires "Verified all URLs and credentials" as a
+pre-submission checkbox.

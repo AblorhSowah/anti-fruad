@@ -1,67 +1,229 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #080a0f;
-  --bg2: #0d1117;
-  --bg3: #111820;
-  --border: #1e2a38;
-  --accent: #e63946;
-  --accent2: #ff6b6b;
-  --green: #00ff9d;
-  --yellow: #ffd60a;
-  --text: #c9d1d9;
-  --text2: #8b949e;
-  --mono: 'Share Tech Mono', monospace;
-  --sans: 'Rajdhani', sans-serif;
+  --bg: #0a0e27;
+  --bg2: #111e3f;
+  --bg3: #1a2a52;
+  --border: #2a3f5f;
+  --accent: #ff3b5e;
+  --accent2: #ff6b85;
+  --green: #00ff88;
+  --yellow: #ffd700;
+  --cyan: #00d4ff;
+  --purple: #b366ff;
+  --text: #e8f0ff;
+  --text2: #a8bacc;
+  --mono: 'Roboto', sans-serif;
+  --sans: 'Roboto', sans-serif;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --glow: 0 0 20px rgba(0, 255, 136, 0.2);
+
+  /* Fixed text tones for surfaces that are deliberately always-dark
+     regardless of site theme (terminal log, scan overlay, code blocks) —
+     do NOT redefine these under .light-mode, or their text becomes
+     unreadable against the fixed-dark background it sits on. */
+  --dark-chrome-text: #e8f0ff;
+  --dark-chrome-text2: #a8bacc;
+  --dark-chrome-green: #00ff88;
+  --dark-chrome-cyan: #00d4ff;
+  --dark-chrome-accent: #ff3b5e;
+  --dark-chrome-accent2: #ff6b85;
 }
+
+/* Light mode variables.
+   Every one of these was checked against the lightest backgrounds it's
+   actually painted on (the --bg body gradient and white .card surfaces)
+   for at least WCAG AA contrast (4.5:1) as small text — the original
+   values were dark-theme colors reused as-is and several (green ~2.8:1,
+   yellow ~2.0:1, cyan ~3.7:1, text2 ~3.9:1) fell well short. */
+html.light-mode {
+  --bg: #f5f7fb;
+  --bg2: #ffffff;
+  --bg3: #eff3f9;
+  --border: #d8e2f0;
+  --accent: #c62828;
+  --accent2: #ff5a7a;
+  --green: #00754a;
+  --yellow: #8a5a00;
+  --cyan: #006fb0;
+  --purple: #6b28c9;
+  --text: #1a2847;
+  --text2: #47597a;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+html.light-mode ::-webkit-scrollbar-track { background: var(--bg); }
+html.light-mode ::-webkit-scrollbar-thumb { background: var(--border); }
 
 body {
-  background: var(--bg);
+  background: linear-gradient(135deg, var(--bg) 0%, #0f1729 100%);
   color: var(--text);
   font-family: var(--sans);
+  line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+html.light-mode body {
+  background: linear-gradient(135deg, #f5f7fb 0%, #eef3fb 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.03) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(255, 59, 94, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Nav stays a fixed dark bar in both themes (brand chrome, not page content) —
+   its text must use --dark-chrome-text/--dark-chrome-text2, not --text/--text2,
+   since those flip to dark colors in light mode and would vanish here. */
+.navbar {
+  background: linear-gradient(90deg, rgba(17, 30, 63, 0.9) 0%, rgba(26, 42, 82, 0.8) 100%);
+  border-bottom: 1px solid rgba(42, 63, 95, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, var(--green), var(--cyan)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--green); }
 
 .btn {
   font-family: var(--mono);
-  font-size: 12px;
-  padding: 8px 20px;
-  border: 1px solid var(--accent);
+  font-size: 11px;
+  padding: 10px 22px;
+  border: 1.5px solid var(--accent);
   background: transparent;
   color: var(--accent);
   cursor: pointer;
-  letter-spacing: 2px;
+  letter-spacing: 0.75px;
   text-transform: uppercase;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
 }
-.btn:hover { background: var(--accent); color: #fff; }
-.btn-green { border-color: var(--green); color: var(--green); }
-.btn-green:hover { background: var(--green); color: var(--bg); }
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn:disabled:hover::before { left: -100%; }
+.btn:disabled:hover { color: var(--accent); box-shadow: none; }
+.btn-green:disabled:hover { color: var(--green); }
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transition: left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: -1;
+}
+
+.btn:hover::before { left: 0; }
+.btn:hover { color: #fff; box-shadow: 0 0 20px rgba(255, 59, 94, 0.5); }
+
+.btn-green {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.btn-green::before { background: var(--green); }
+.btn-green:hover {
+  color: var(--bg);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.6), inset 0 0 10px rgba(0, 255, 136, 0.2);
+}
 
 .card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  padding: 20px;
+  background: rgba(17, 30, 63, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(42, 63, 95, 0.4);
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.card:hover {
+  border-color: rgba(42, 63, 95, 0.8);
+  box-shadow: var(--shadow), 0 0 20px rgba(0, 212, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+html.light-mode .card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(216, 226, 240, 0.6);
+}
+
+html.light-mode .card:hover {
+  border-color: rgba(216, 226, 240, 1);
+  box-shadow: var(--shadow), 0 0 20px rgba(0, 132, 212, 0.08);
 }
 
 .tag {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--text2);
+  font-weight: 700;
+  background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
+  padding: 4px 9px;
+  border-radius: 4px;
+  display: inline-block;
 }
 
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+h1, h2, h3 { font-family: var(--sans); letter-spacing: -0.3px; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px var(--green), 0 0 10px var(--green); }
+  50% { box-shadow: 0 0 20px var(--green), 0 0 30px var(--green); }
+}
+
 @keyframes scan {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100vh); }
 }
-@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}

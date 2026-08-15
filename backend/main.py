@@ -1,9 +1,11 @@
 import os, sys, io, uuid, warnings
 from datetime import datetime
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable, AuthError, Neo4jError
 from contextlib import asynccontextmanager
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
@@ -16,6 +18,13 @@ from model_handler import AMLInference
 URI, AUTH = "bolt://localhost:7687", ("neo4j", "password123")
 driver = GraphDatabase.driver(URI, auth=AUTH)
 model = AMLInference()
+
+def db_unavailable_detail(exc: Exception) -> str:
+    return (
+        "Cannot reach the Neo4j database at "
+        f"{URI}. Make sure it is running (docker-compose up -d) and reachable, "
+        f"then try again. ({exc.__class__.__name__})"
+    )
 
 BATCH_SIZE = 2000
 
@@ -80,14 +89,43 @@ ACCOUNT_MAP = load_account_map()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    with driver.session() as s:
-        s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Dataset) REQUIRE d.id IS UNIQUE")
-        s.run("DROP CONSTRAINT account_id_unique IF EXISTS")
+    try:
+        with driver.session() as s:
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Dataset) REQUIRE d.id IS UNIQUE")
+            s.run("DROP CONSTRAINT account_id_unique IF EXISTS")
+    except Exception as e:
+        # Don't let a down database take the whole API down — /health and per-request
+        # error handling will surface this clearly instead of the frontend seeing
+        # nothing but connection-refused for every endpoint.
+        print(f"WARNING: could not reach Neo4j at startup ({e}). The API will still start; "
+              f"requests that touch the database will fail until Neo4j is reachable.")
     yield
     driver.close()
 
 app = FastAPI(title="AML Shadow Hunter", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.exception_handler(ServiceUnavailable)
+@app.exception_handler(AuthError)
+async def neo4j_unavailable_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=503, content={"detail": db_unavailable_detail(exc)})
+
+@app.exception_handler(Neo4jError)
+async def neo4j_error_handler(request: Request, exc: Neo4jError):
+    return JSONResponse(status_code=502, content={"detail": f"Database error: {exc}"})
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"detail": f"{exc.__class__.__name__}: {exc}"})
+
+@app.get("/health")
+def health():
+    try:
+        with driver.session() as s:
+            s.run("RETURN 1").consume()
+        return {"status": "ok", "neo4j": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=db_unavailable_detail(e))
 
 def flush(session, batch, dataset_id):
     session.run("""
@@ -120,8 +158,17 @@ def delete_dataset(dataset_id: str):
 
 @app.post("/upload/preview")
 async def preview_columns(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Please upload a .csv file")
     contents = await file.read()
-    df = pd.read_csv(io.BytesIO(contents), nrows=5)
+    if not contents:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty")
+    try:
+        df = pd.read_csv(io.BytesIO(contents), nrows=5)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {e}")
+    if len(df.columns) == 0:
+        raise HTTPException(status_code=400, detail="No columns detected in CSV")
     return {"columns": list(df.columns), "sample": df.to_dict(orient="records")}
 
 @app.post("/upload")
@@ -135,18 +182,29 @@ async def upload_dataset(
     dataset_name: str = ""
 ):
     contents = await file.read()
-    df = pd.read_csv(io.BytesIO(contents), nrows=150000)
+    if not contents:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty")
+    try:
+        df = pd.read_csv(io.BytesIO(contents), nrows=150000)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {e}")
 
     for col in [sender, receiver, amount, step]:
         if col not in df.columns:
             raise HTTPException(status_code=400, detail=f"Column '{col}' not found in CSV")
 
     df = df.dropna(subset=[sender, receiver, amount, step])
+    if len(df) == 0:
+        raise HTTPException(status_code=400, detail="No valid rows remain after removing rows with missing sender/receiver/amount/timestamp values")
     dataset_id = str(uuid.uuid4())[:8]
     name = dataset_name or file.filename
 
+    try:
+        df['amount'] = df[amount].astype(float)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=f"Column '{amount}' contains non-numeric values and cannot be used as Amount: {e}")
+
     df['hour'] = pd.to_datetime(df[step], errors='coerce').dt.hour.fillna(0).astype(int)
-    df['amount'] = df[amount].astype(float)
     df['format'] = df[type_col].fillna('Wire') if type_col and type_col in df.columns else 'Wire'
     df['currency'] = df['Payment Currency'].fillna('US Dollar') if 'Payment Currency' in df.columns else 'US Dollar'
     df['pay_curr'] = df['currency']
@@ -212,7 +270,32 @@ def get_alerts(dataset_id: str, threshold: float = 0.7, limit: int = 100):
             ORDER BY r.risk_score DESC LIMIT $limit
         """, did=dataset_id, threshold=threshold, limit=limit)
         return [r.data() for r in result]
-    
+
+@app.get("/transactions")
+def get_transactions(dataset_id: str, threshold: float = 0.7, limit: int = 50, offset: int = 0):
+    with driver.session() as s:
+        total = s.run("""
+            MATCH (src)-[r:TRANSFERRED]->(tgt)
+            WHERE r.dataset_id = $did
+            RETURN count(r) AS c
+        """, did=dataset_id).single()["c"]
+        result = s.run("""
+            MATCH (src)-[r:TRANSFERRED]->(tgt)
+            WHERE r.dataset_id = $did
+            RETURN src.id AS sender, tgt.id AS receiver,
+                   r.amount AS amount, r.risk_score AS risk_score,
+                   r.format AS type, r.currency AS currency,
+                   r.from_country AS from_country, r.to_country AS to_country
+            ORDER BY r.risk_score DESC
+            SKIP $offset LIMIT $limit
+        """, did=dataset_id, offset=offset, limit=limit)
+        transactions = []
+        for r in result:
+            row = r.data()
+            row["flagged"] = (row.get("risk_score") or 0) >= threshold
+            transactions.append(row)
+        return {"transactions": transactions, "total": total, "offset": offset, "limit": limit}
+
 @app.get("/accounts/top-suspicious")
 def get_top_suspicious(dataset_id: str, threshold: float = 0.7, limit: int = 10):
     with driver.session() as s:
